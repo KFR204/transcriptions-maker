@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Transcription with AI</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="text-center my-5">
+            <h1 class="fw-bold display-3">Video Transcription with AI</h1>
+            <p class="lead">Create transcriptions from YouTube and Twitter videos</p>
+        </header>
+
+        <div class="card shadow-lg mb-5">
+            <div class="card-body p-4">
+                <form id="transcriptionForm">
+                    <div class="mb-3">
+                        <label for="videoUrl" class="form-label">Enter Video URLs</label>
+                        <textarea class="form-control" id="videoUrl" rows="3" placeholder="Enter one or more YouTube or Twitter/X URLs (each on a new line)" required></textarea>
+                        <div class="form-text">YouTube and Twitter/X are supported. You can enter multiple URLs, each on a new line. Platform type is detected automatically.</div>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary btn-lg" id="transcribeBtn">
+                            <span class="spinner-border spinner-border-sm d-none" id="loadingSpinner" role="status" aria-hidden="true"></span>
+                            <span id="buttonText">Create Transcription</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-end mb-3 mt-4 d-none" id="downloadAllContainer">
+            <button class="btn btn-primary" id="downloadAllBtn">
+                <i class="bi bi-download"></i> Download All Transcriptions
+            </button>
+        </div>
+        
+        <div id="transcriptionsContainer">
+            <!-- Separate transcription cards will be added here via JavaScript -->
+        </div>
+
+        <div class="alert alert-danger d-none" id="errorAlert" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <span id="errorMessage"></span>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

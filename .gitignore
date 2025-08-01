@@ -1,0 +1,27 @@
+# Зависимости
+node_modules/
+package-lock.json
+
+# Переменные окружения
+.env
+
+# Временные файлы
+temp/
+*.mp3
+*.wav
+*.mp4
+
+# Логи
+logs
+*.log
+npm-debug.log*
+
+# Директории IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Системные файлы
+.DS_Store
+Thumbs.db

@@ -1,0 +1,184 @@
+:root {
+    --primary-color: #4a6bff;
+    --secondary-color: #6c757d;
+    --success-color: #28a745;
+    --danger-color: #dc3545;
+    --light-color: #f8f9fa;
+    --dark-color: #343a40;
+    --twitter-color: #000000;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f5f7ff;
+    color: #333;
+    line-height: 1.6;
+}
+
+/* Стили для главного заголовка */
+h1.fw-bold.display-3 {
+    background: linear-gradient(45deg, var(--primary-color), #3a5bef);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    letter-spacing: -0.5px;
+    text-shadow: 5px 5px 10px rgba(0, 0, 0, 0.05);
+    margin-bottom: 0.5rem;
+    font-size: 55px;
+}
+
+/* Стили для кнопки Twitter/X в стиле x.com */
+.btn-outline-dark {
+    color: var(--twitter-color);
+    border-color: var(--twitter-color);
+    font-weight: 500;
+}
+
+.btn-outline-dark:hover,
+.btn-outline-dark:focus,
+.btn-check:checked+.btn-outline-dark {
+    background-color: var(--twitter-color);
+    border-color: var(--twitter-color);
+    color: white;
+}
+
+.container {
+    max-width: 800px;
+}
+
+.card {
+    border-radius: 10px;
+    border: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    margin-bottom: 20px;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
+}
+
+/* Основные стили кнопок */
+.btn-primary {
+    background-color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+}
+
+.btn-primary:hover {
+    background-color: #3a5bef !important;
+    border-color: #3a5bef !important;
+}
+
+/* Стили для шапки карточки транскрипции */
+.card-header.bg-primary {
+    background-color: var(--primary-color) !important;
+}
+
+.bg-primary {
+    background-color: var(--primary-color) !important;
+}
+
+/* Стили для кнопок скачивания и копирования */
+.btn-outline-primary {
+    color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.btn-outline-primary:hover {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    color: white;
+}
+
+.btn-outline-secondary {
+    color: var(--secondary-color);
+    border-color: var(--secondary-color);
+}
+
+.btn-outline-secondary:hover {
+    background-color: var(--secondary-color);
+    border-color: var(--secondary-color);
+    color: white;
+}
+
+.form-control:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.25rem rgba(74, 107, 255, 0.25);
+}
+
+/* Стили для блока с транскрипцией */
+.bg-light {
+    background-color: var(--light-color) !important;
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.05);
+    padding: 1.5rem !important;
+}
+
+.transcription-box {
+    max-height: 400px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary-color) #f0f0f0;
+}
+
+.transcription-box::-webkit-scrollbar {
+    width: 8px;
+}
+
+.transcription-box::-webkit-scrollbar-track {
+    background: #f0f0f0;
+    border-radius: 4px;
+}
+
+.transcription-box::-webkit-scrollbar-thumb {
+    background-color: var(--primary-color);
+    border-radius: 4px;
+}
+
+.fade-in {
+    animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.card-header .badge {
+    font-size: 0.8rem;
+    padding: 0.4rem 0.6rem;
+    transition: all 0.2s ease;
+    max-width: 50%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.card-header .badge:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+    text-decoration: underline;
+}
+
+.card-header a.badge {
+    color: white !important;
+    text-decoration: none;
+    display: inline-block;
+    pointer-events: auto;
+}
+
+.card-header a.badge:hover {
+    color: white !important;
+    text-decoration: underline;
+}
+
+footer {
+    border-top: 1px solid #eee;
+}
