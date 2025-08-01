@@ -255,6 +255,16 @@ async function getTwitterBroadcastAudio(url) {
 
             videoId = broadcastIdMatch[1];
             outputFilename = `twitter_broadcast_${videoId}`;
+        } else if (url.includes('/spaces/')) {
+            // Формат URL для Spaces
+            const spacesIdMatch = url.match(/\/spaces\/([^\/\?]+)/);
+
+            if (!spacesIdMatch || !spacesIdMatch[1]) {
+                throw new Error('Could not extract spaces ID from URL');
+            }
+
+            videoId = spacesIdMatch[1];
+            outputFilename = `twitter_spaces_${videoId}`;
         } else if (url.includes('/status/')) {
             // Формат URL для обычных постов
             const statusIdMatch = url.match(/\/status\/(\d+)/);
@@ -266,7 +276,7 @@ async function getTwitterBroadcastAudio(url) {
             videoId = statusIdMatch[1];
             outputFilename = `twitter_status_${videoId}`;
         } else {
-            throw new Error('Invalid Twitter/X URL format. Must contain /broadcasts/ or /status/');
+            throw new Error('Invalid Twitter/X URL format. Must contain /broadcasts/, /spaces/ or /status/');
         }
 
         const outputDir = path.join(tempDir);
@@ -364,6 +374,11 @@ async function getTwitterVideoTitle(url) {
             const broadcastIdMatch = url.match(/\/broadcasts\/([^\/\?]+)/);
             if (broadcastIdMatch && broadcastIdMatch[1]) {
                 videoId = broadcastIdMatch[1];
+            }
+        } else if (url.includes('/spaces/')) {
+            const spacesIdMatch = url.match(/\/spaces\/([^\/\?]+)/);
+            if (spacesIdMatch && spacesIdMatch[1]) {
+                videoId = spacesIdMatch[1];
             }
         } else if (url.includes('/status/')) {
             const statusIdMatch = url.match(/\/status\/(\d+)/);
