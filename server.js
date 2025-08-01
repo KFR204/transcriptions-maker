@@ -468,7 +468,7 @@ async function transcribeLargeAudio(audioInfo) {
 
 // Функция для транскрипции одного сегмента
 async function transcribeSegment(segmentInfo) {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
+    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-2.5-pro" });
 
     console.log(`Transcribing segment: ${path.basename(segmentInfo.audioPath)}`);
 
@@ -525,7 +525,7 @@ async function transcribeSegment(segmentInfo) {
 // Функция для транскрипции больших аудиофайлов
 async function transcribeWithGemini(audioInfo) {
     try {
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
+        const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-2.5-pro"});
 
         // Проверяем существование аудиофайла
         if (!fs.existsSync(audioInfo.audioPath)) {
@@ -613,7 +613,7 @@ async function transcribeWithGemini(audioInfo) {
 async function transcribeWithURL(audioInfo) {
     console.log('Using URL transcription method');
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
+    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-2.5-pro" });
 
     // Создаем промпт с информацией о видео
     const urlPrompt = `I want you to act as a transcriber for audio from a YouTube video.

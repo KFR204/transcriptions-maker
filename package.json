@@ -1,7 +1,7 @@
 {
   "name": "transcriptions-maker",
   "version": "1.0.0",
-  "description": "Веб-приложение для создания транскрипций видео с YouTube и Twitter с помощью Gemini AI",
+  "description": "Web app for creating YouTube and Twitter video transcriptions using Gemini AI",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -12,7 +12,6 @@
     "dotenv": "^16.3.1",
     "cors": "^2.8.5",
     "axios": "^1.6.2",
-    "youtube-dl-exec": "^2.4.6",
     "@distube/ytdl-core": "^4.13.3",
     "ffmpeg-static": "^5.2.0",
     "fluent-ffmpeg": "^2.1.2",
