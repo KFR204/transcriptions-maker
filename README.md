@@ -50,13 +50,46 @@
 
 5. Настройте следующие переменные в файле `.env`:
    ```
-   GEMINI_API_KEY=ваш_ключ_api
-   GEMINI_MODEL=gemini-2.5-pro
-   PORT=5000
-   MAX_SIZE=60
-   SEGMENT_SIZE=2000
+   PORT=5000                              # Порт для веб-сервера
+   GEMINI_API_KEY=ваш_ключ_api            # API ключ Google Gemini
+   GEMINI_MODEL=gemini-2.5-pro            # Модель Gemini для транскрипции
+
+   MAX_SIZE=60                            # Максимальный размер аудиофайла в МБ для прямой отправки
+   SEGMENT_SIZE=2000                      # Размер сегмента в секундах при разделении больших файлов
+
+   USE_PROXY=false                        # Использовать ли прокси (true/false)
+   PROXY_URL=http://user:pass@host:port   # URL прокси-сервера
    ```
 
+6. Создайте файл `cookies.json`:
+
+1. **Экспорт куки из браузера**:
+   - Установите расширение для экспорта куки (например, "EditThisCookie" для Chrome)
+   - Войдите в свой аккаунт YouTube
+   - Экспортируйте куки в формате JSON
+
+2. **Создание файла**:
+   - Создайте файл `cookies.json` в корневой директории проекта
+   - Вставьте экспортированные куки в этот файл
+   - Убедитесь, что файл содержит массив объектов куки в формате:
+   ```json
+   [
+     {
+       "domain": ".youtube.com",
+       "expirationDate": 1789581458.995678,
+       "hostOnly": false,
+       "httpOnly": false,
+       "name": "COOKIE_NAME",
+       "path": "/",
+       "sameSite": "unspecified",
+       "secure": true,
+       "session": false,
+       "storeId": "0",
+       "value": "COOKIE_VALUE"
+     },
+     ...
+   ]
+   ```
 6. Запустить приложение:
    ```
    npm start

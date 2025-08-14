@@ -14,12 +14,132 @@ const ffmpegPath = require('ffmpeg-static');
 const { exec } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
+const http = require('http');
 
 // Настройка ffmpeg
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 // Загрузка переменных окружения
 dotenv.config();
+
+// Настройка прокси для HTTP-запросов
+const useProxy = process.env.USE_PROXY === 'true';
+const proxyUrl = process.env.PROXY_URL;
+const proxyConfig = useProxy && proxyUrl ? (() => {
+    try {
+        const url = new URL(proxyUrl);
+        const config = {
+            protocol: url.protocol.replace(':', ''),
+            host: url.hostname,
+            port: url.port || (url.protocol === 'https:' ? 443 : 80)
+        };
+
+        // Добавляем авторизацию, если она есть в URL
+        if (url.username && url.password) {
+            config.auth = {
+                username: url.username,
+                password: url.password
+            };
+        }
+
+        return config;
+    } catch (error) {
+        console.error('Error parsing proxy URL:', error.message);
+        return null;
+    }
+})() : null;
+
+console.log(`Proxy configuration: ${useProxy ? 'Enabled' : 'Disabled'}${proxyConfig ? ` (${proxyUrl})` : ''}`);
+
+function loadCookiesFromJson(filePath) {
+    try {
+        if (!fs.existsSync(filePath)) {
+            console.log(`Файл с куки не найден: ${filePath}`);
+            return null;
+        }
+
+        const cookiesData = fs.readFileSync(filePath, 'utf8');
+        const cookies = JSON.parse(cookiesData);
+
+        if (!Array.isArray(cookies) || cookies.length === 0) {
+            console.log('Файл с куки пуст или имеет неверный формат');
+            return null;
+        }
+
+        console.log(`Загружено ${cookies.length} куки из файла ${filePath}`);
+        return cookies;
+    } catch (error) {
+        console.error(`Ошибка при загрузке куки из файла: ${error.message}`);
+        return null;
+    }
+}
+
+// Функция для безопасного форматирования URL прокси для yt-dlp
+function formatProxyUrlForYtDlp(url) {
+    try {
+        const proxyUrl = new URL(url);
+        // Если есть авторизация, нужно правильно экранировать символы
+        if (proxyUrl.username && proxyUrl.password) {
+            // Экранируем специальные символы в username и password
+            const username = encodeURIComponent(proxyUrl.username);
+            const password = encodeURIComponent(proxyUrl.password);
+            const host = proxyUrl.hostname;
+            const port = proxyUrl.port || (proxyUrl.protocol === 'https:' ? '443' : '80');
+            const protocol = proxyUrl.protocol.replace(':', '');
+
+            return `${protocol}://${username}:${password}@${host}:${port}`;
+        }
+        return url;
+    } catch (error) {
+        console.error('Error formatting proxy URL:', error.message);
+        return url; // Возвращаем исходный URL в случае ошибки
+    }
+}
+
+// Функция для создания файла конфигурации yt-dlp с настройками прокси
+async function createYtDlpConfig(proxyUrl) {
+    try {
+        if (!proxyUrl) return null;
+
+        const configDir = path.join(__dirname, 'temp');
+        if (!fs.existsSync(configDir)) {
+            fs.mkdirSync(configDir, { recursive: true });
+        }
+
+        const configPath = path.join(configDir, 'yt-dlp.conf');
+
+        // Извлекаем данные авторизации из URL
+        const url = new URL(proxyUrl);
+        let configContent = '';
+
+        if (url.username && url.password) {
+            // Формат для yt-dlp с авторизацией - встраиваем авторизацию прямо в URL
+            const username = encodeURIComponent(url.username);
+            const password = encodeURIComponent(url.password);
+            const host = url.hostname;
+            const port = url.port || (url.protocol === 'https:' ? '443' : '80');
+            const protocol = url.protocol.replace(':', '');
+
+            // Используем формат с авторизацией в URL, который поддерживается всеми версиями
+            configContent = `--proxy "${protocol}://${username}:${password}@${host}:${port}"\n` +
+                `--force-ipv4\n` +
+                `--socket-timeout 30\n` +
+                `--user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"`;
+        } else {
+            // Формат для yt-dlp без авторизации
+            configContent = `--proxy "${proxyUrl}"\n` +
+                `--force-ipv4\n` +
+                `--socket-timeout 30\n` +
+                `--user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"`;
+        }
+
+        fs.writeFileSync(configPath, configContent);
+        return configPath;
+    } catch (error) {
+        console.error('Error creating yt-dlp configuration:', error.message);
+        return null;
+    }
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -99,15 +219,109 @@ async function getYoutubeAudio(url) {
 
         console.log('Downloading audio from video...');
 
+        let selectedFormat = null;
+
+        // Настраиваем опции для ytdl
+        const ytdlOptions = {
+            highWaterMark: 1 << 25, // 32MB
+            requestOptions: {
+                // timeout: 30000, // 30 секунд таймаут для HTTP запросов
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9'
+
+                }
+            }
+        };
+
+        // Создаем прокси-агент один раз, если прокси включен
+        let agent = null;
+        if (useProxy && proxyUrl) {
+            console.log(`Using proxy for YouTube download: ${proxyUrl.replace(/\/\/.*?@/, '//***:***@')}`);
+
+            try {
+                // Загружаем куки из JSON файла
+                const cookies = loadCookiesFromJson(cookiesJsonPath);
+
+                // Создаем прокси-агент с помощью метода ytdl.createProxyAgent
+                agent = ytdl.createProxyAgent({
+                    uri: proxyUrl,
+
+                    // Отключаем проверку SSL для решения проблем с сертификатами
+                    rejectUnauthorized: true
+                }, cookies);
+
+                ytdlOptions.agent = agent;
+                console.log('Proxy agent successfully created');
+            } catch (proxyError) {
+                console.error('Error creating proxy agent:', proxyError.message);
+                console.log('Continuing without proxy...');
+                agent = null;
+            }
+        }
+
+        // Добавляем заголовки независимо от использования прокси
+        // ytdlOptions.requestOptions = {
+        //     headers: {
+        //         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        //         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9'
+        //     }
+        // };
+
+        // Добавляем формат, если он выбран
+        if (selectedFormat) {
+            ytdlOptions.format = selectedFormat;
+        } else {
+            ytdlOptions.quality = 'highest';
+            ytdlOptions.filter = format => {
+                // Выбираем только аудио форматы и предпочитаем оригинальную дорожку
+                return format.audioCodec && !format.qualityLabel;
+            };
+        }
+
         // Получаем информацию о доступных форматах
         console.log('Getting available formats...');
-        const info = await ytdl.getInfo(url);
+        // const info = await ytdl.getInfo(url, ytdlOptions);
+        // Создаем промис с таймаутом для getInfo
+        const getInfoWithTimeout = new Promise(async (resolve, reject) => {
+            const timeoutId = setTimeout(() => {
+                reject(new Error('Timeout while getting video info (30s). Check your proxy settings if using proxy.'));
+            }, 30000); // 30 секунд таймаут
+
+            try {
+                const info = await ytdl.getInfo(url, ytdlOptions);
+                clearTimeout(timeoutId);
+                resolve(info);
+            } catch (error) {
+                clearTimeout(timeoutId);
+                reject(error);
+            }
+        });
+
+        let info;
+        try {
+            info = await getInfoWithTimeout;
+        } catch (error) {
+            console.error('Error getting video info:', error.message);
+
+            // Если ошибка связана с прокси, даем более информативное сообщение
+            if (useProxy && (
+                error.message.includes('ECONNREFUSED') ||
+                error.message.includes('ETIMEDOUT') ||
+                error.message.includes('ECONNRESET') ||
+                error.message.includes('socket hang up') ||
+                error.message.includes('Timeout')
+            )) {
+                throw new Error(`Proxy connection failed: ${error.message}. Please check if the proxy server is working.`);
+            }
+            throw error;
+        }
 
         // Выводим информацию о доступных аудиоформатах для отладки
         const audioFormats = info.formats.filter(format => format.hasAudio && !format.hasVideo);
 
         // Улучшенная логика выбора аудиодорожки
-        let selectedFormat = null;
+        //let selectedFormat = null;
 
         // 1. Сначала ищем оригинальную английскую дорожку по displayName и audioIsDefault
         selectedFormat = audioFormats.find(format =>
@@ -167,28 +381,35 @@ async function getYoutubeAudio(url) {
         // Загружаем аудио с помощью ytdl-core и конвертируем с помощью ffmpeg
         return new Promise((resolve, reject) => {
             try {
-                // Используем выбранный формат или фильтр, если формат не найден
-                const videoReadableStream = selectedFormat
-                    ? ytdl(url, { format: selectedFormat, highWaterMark: 1 << 25 })
-                    : ytdl(url, {
-                        quality: 'highest',
-                        filter: format => {
-                            // Выбираем только аудио форматы и предпочитаем оригинальную дорожку
-                            return format.audioCodec && !format.qualityLabel;
-                        },
-                        highWaterMark: 1 << 25, // 32MB
-                        requestOptions: {
-                            headers: {
-                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9'
-                            }
-                        }
-                    });
+                // Обновляем опции ytdl с выбранным форматом
+                if (selectedFormat) {
+                    ytdlOptions.format = selectedFormat;
+                }
+
+                // Создаем поток для скачивания видео
+                const videoReadableStream = ytdl(url, ytdlOptions);
 
                 // Обработка ошибок потока
                 videoReadableStream.on('error', (err) => {
-                    console.error('Error getting audio stream:', err);
-                    reject(new Error(`Error getting audio stream: ${err.message}`));
+                    console.error('Error getting audio stream:', err);    // Определяем, связана ли ошибка с прокси
+                    let errorMessage = `Error getting audio stream: ${err.message}`;
+                    let isProxyError = false;
+
+                    // Проверяем типичные ошибки прокси
+                    if (err.message.includes('ECONNREFUSED') ||
+                        err.message.includes('ETIMEDOUT') ||
+                        err.message.includes('ECONNRESET') ||
+                        err.message.includes('socket hang up') ||
+                        err.message.includes('tunneling socket could not be established') ||
+                        err.message.includes('403 Forbidden') ||
+                        err.message.includes('407 Proxy Authentication Required')) {
+
+                        isProxyError = true;
+                        errorMessage = `Proxy error: ${err.message}. Please check your proxy settings or try a different proxy.`;
+                        console.error('Detected proxy-related error:', err.message);
+                    }
+
+                    reject(new Error(errorMessage, { cause: { isProxyError, originalError: err } }));
                 });
 
                 console.log('Starting audio stream download...');
@@ -222,7 +443,6 @@ async function getYoutubeAudio(url) {
                 reject(new Error(`Error creating stream: ${streamError.message}`));
             }
         });
-
     } catch (error) {
         console.error('Error getting audio from YouTube:', error);
         throw error;
@@ -310,7 +530,7 @@ async function getTwitterBroadcastAudio(url) {
         console.log('Retrieved Twitter/X video title:', videoTitle);
 
         // Используем yt-dlp для скачивания аудио напрямую
-        return new Promise((resolve, reject) => {
+        return new Promise(async (resolve, reject) => {
             // Команда для извлечения аудио напрямую
             // -x: извлечь аудио
             // --audio-format mp3: формат аудио
@@ -321,7 +541,36 @@ async function getTwitterBroadcastAudio(url) {
             // Добавляем уникальный идентификатор к имени файла для предотвращения конфликтов
             const uniqueOutputPath = outputPath.replace('.mp3', `_${Date.now()}`);
 
-            exec(`yt-dlp "${url}" -x --audio-format mp3 --audio-quality 0 -o "${uniqueOutputPath}" --ffmpeg-location "${ffmpegLocation}" --quiet --no-warnings --no-progress`,
+            // Добавляем настройки прокси, если он включен
+            let proxyArg = '';
+            let configPath = null;
+
+            if (useProxy && proxyUrl) {
+                try {
+                    // Создаем файл конфигурации для yt-dlp с настройками прокси
+                    configPath = await createYtDlpConfig(proxyUrl);
+
+                    if (configPath) {
+                        proxyArg = `--config-location "${configPath}"`;
+                        console.log(`Using proxy config for Twitter download: ${proxyUrl.replace(/\/\/.*?@/, '//***:***@')}`); // Скрываем учетные данные в логах
+                    } else {
+                        // Запасной вариант, если не удалось создать файл конфигурации
+                        const formattedProxyUrl = formatProxyUrlForYtDlp(proxyUrl);
+                        proxyArg = `--proxy "${formattedProxyUrl}" --force-ipv4 --socket-timeout 30`;
+                        console.log(`Using proxy for Twitter download: ${proxyUrl.replace(/\/\/.*?@/, '//***:***@')}`); // Скрываем учетные данные в логах
+                    }
+                } catch (error) {
+                    console.error('Error configuring proxy for yt-dlp:', error.message);
+                    // Используем базовый вариант в случае ошибки
+                    const formattedProxyUrl = formatProxyUrlForYtDlp(proxyUrl);
+                    proxyArg = `--proxy "${formattedProxyUrl}" --force-ipv4 --socket-timeout 30`;
+                }
+            }
+
+            const ytDlpCommand = `yt-dlp ${proxyArg} "${url}" -x --audio-format mp3 --audio-quality 0 -o "${uniqueOutputPath}" --ffmpeg-location "${ffmpegLocation}" --quiet --no-warnings --no-progress`;
+            console.log(`Executing command: ${ytDlpCommand.replace(/--proxy-password "[^"]*"/, '--proxy-password "***"')}`);
+
+            exec(ytDlpCommand,
                 { maxBuffer: 10 * 1024 * 1024 }, // 10 MB buffer
                 async (error, stdout, stderr) => {
                     if (error) {
@@ -357,9 +606,38 @@ async function getTwitterBroadcastAudio(url) {
 // Функция для получения названия видео из Twitter/X
 async function getTwitterVideoTitle(url) {
     try {
+        // Добавляем настройки прокси, если он включен
+        let proxyArg = '';
+        let configPath = null;
+
+        if (useProxy && proxyUrl) {
+            try {
+                // Создаем файл конфигурации для yt-dlp с настройками прокси
+                configPath = await createYtDlpConfig(proxyUrl);
+
+                if (configPath) {
+                    proxyArg = `--config-location "${configPath}"`;
+                    console.log(`Using proxy config for Twitter title retrieval: ${proxyUrl.replace(/\/\/.*?@/, '//***:***@')}`); // Скрываем учетные данные в логах
+                } else {
+                    // Запасной вариант, если не удалось создать файл конфигурации
+                    const formattedProxyUrl = formatProxyUrlForYtDlp(proxyUrl);
+                    proxyArg = `--proxy "${formattedProxyUrl}" --force-ipv4 --socket-timeout 30`;
+                    console.log(`Using proxy for Twitter title retrieval: ${proxyUrl.replace(/\/\/.*?@/, '//***:***@')}`); // Скрываем учетные данные в логах
+                }
+            } catch (error) {
+                console.error('Error configuring proxy for yt-dlp:', error.message);
+                // Используем базовый вариант в случае ошибки
+                const formattedProxyUrl = formatProxyUrlForYtDlp(proxyUrl);
+                proxyArg = `--proxy "${formattedProxyUrl}" --force-ipv4 --socket-timeout 30`;
+            }
+        }
+
         // Используем yt-dlp для получения только названия видео
-        const result = await execPromise(`yt-dlp --skip-download --print title "${url}"`);
-        
+        const ytDlpCommand = `yt-dlp ${proxyArg} --skip-download --print title "${url}"`;
+        console.log(`Executing command: ${ytDlpCommand.replace(/--proxy-password "[^"]*"/, '--proxy-password "***"')}`);
+
+        const result = await execPromise(ytDlpCommand);
+
         // Проверяем, что получили какой-то результат
         if (result && result.stdout) {
             const title = result.stdout.trim();
@@ -367,7 +645,7 @@ async function getTwitterVideoTitle(url) {
                 return title;
             }
         }
-        
+
         // Если не удалось получить название, извлекаем ID из URL
         let videoId = "";
         if (url.includes('/broadcasts/')) {
@@ -386,7 +664,7 @@ async function getTwitterVideoTitle(url) {
                 videoId = statusIdMatch[1];
             }
         }
-        
+
         return `Twitter/X Content (${videoId || 'unknown'})`;
     } catch (error) {
         console.error('Error getting Twitter video title:', error);
@@ -413,10 +691,28 @@ async function splitAudioFile(audioPath, segmentDuration) {
         // Получаем список созданных файлов
         const segmentFiles = fs.readdirSync(outputDir)
             .filter(file => file.startsWith(`${fileBaseName}_part_`))
-            .map(file => path.join(outputDir, file))
-            .sort(); // Сортируем, чтобы сохранить порядок
+            .map(file => {
+                // Извлекаем номер части из имени файла
+                const match = file.match(/_part_(\d{3})/);
+                const partNumber = match ? parseInt(match[1], 10) : 999;
+                return {
+                    fileName: file,
+                    fullPath: path.join(outputDir, file),
+                    partNumber: partNumber
+                };
+            })
+            .sort((a, b) => a.partNumber - b.partNumber) // Сортируем по номеру части
+            .map(item => item.fullPath);
 
-        console.log(`Audio file split into ${segmentFiles.length} parts`);
+        console.log(`Audio file split into ${segmentFiles.length} parts:`);
+        segmentFiles.forEach((file, index) => {
+            console.log(`  Part ${index + 1}: ${path.basename(file)}`);
+        });
+
+        if (segmentFiles.length === 0) {
+            throw new Error('No segment files were created');
+        }
+
         return segmentFiles;
     } catch (error) {
         console.error('Error splitting audio file:', error);
@@ -432,10 +728,12 @@ async function transcribeLargeAudio(audioInfo) {
         // Разделяем аудиофайл на части
         const segmentFiles = await splitAudioFile(audioInfo.audioPath, process.env.SEGMENT_SIZE);
         let fullTranscription = '';
+        const transcriptionParts = [];
 
         // Обрабатываем каждый сегмент
         for (let i = 0; i < segmentFiles.length; i++) {
-            console.log(`Processing segment ${i + 1}/${segmentFiles.length}...`);
+            console.log(`\n=== Processing segment ${i + 1}/${segmentFiles.length} ===`);
+            console.log(`Segment file: ${path.basename(segmentFiles[i])}`);
 
             const segmentInfo = {
                 audioPath: segmentFiles[i],
@@ -446,20 +744,35 @@ async function transcribeLargeAudio(audioInfo) {
             // Используем стандартную функцию для транскрипции сегмента
             try {
                 const segmentResult = await transcribeSegment(segmentInfo);
-                fullTranscription += segmentResult.transcription + '\n\n';
-                console.log(`Segment ${i + 1} successfully transcribed`);
+
+                // Сохраняем результат без маркера части
+                transcriptionParts.push(segmentResult.transcription);
+
+                console.log(`✓ Segment ${i + 1} successfully transcribed`);
+                console.log(`  Transcription length: ${segmentResult.transcription.length} characters`);
             } catch (segmentError) {
-                console.error(`Error transcribing segment ${i + 1}:`, segmentError);
-                fullTranscription += `[Error transcribing part ${i + 1}]\n\n`;
+                console.error(`✗ Error transcribing segment ${i + 1}:`, segmentError.message);
+
+                // Добавляем только сообщение об ошибке без маркера части
+                transcriptionParts.push(`[Error transcribing this part: ${segmentError.message}]`);
             }
 
             // Удаляем временный файл сегмента
             try {
                 fs.unlinkSync(segmentFiles[i]);
+                console.log(`  Temporary segment file deleted: ${path.basename(segmentFiles[i])}`);
             } catch (unlinkError) {
-                console.error(`Error deleting temporary segment file ${i + 1}:`, unlinkError);
+                console.error(`  Error deleting temporary segment file ${i + 1}:`, unlinkError.message);
             }
         }
+
+        // Объединяем все части транскрипции
+        fullTranscription = transcriptionParts.join('\n\n');
+
+        console.log(`\n=== Transcription complete ===`);
+        console.log(`Total parts processed: ${segmentFiles.length}`);
+        console.log(`Successful parts: ${transcriptionParts.filter(p => !p.includes('[Error transcribing')).length}`);
+        console.log(`Failed parts: ${transcriptionParts.filter(p => p.includes('[Error transcribing')).length}`);
 
         return {
             title: audioInfo.title,
@@ -515,6 +828,16 @@ async function transcribeSegment(segmentInfo) {
             const response = await result.response;
             const text = response.text();
 
+            console.log('Response received from Gemini API');
+
+            // Проверяем, не пустая ли транскрипция
+            if (text.length === 0) {
+                console.log('Получена пустая транскрипция, повторная попытка...');
+                throw new Error('Пустая транскрипция');
+            }
+
+            console.log(`Transcription length: ${text.length} characters`);
+
             return {
                 title: segmentInfo.title,
                 transcription: text
@@ -540,7 +863,7 @@ async function transcribeSegment(segmentInfo) {
 // Функция для транскрипции больших аудиофайлов
 async function transcribeWithGemini(audioInfo) {
     try {
-        const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-2.5-pro"});
+        const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-2.5-pro" });
 
         // Проверяем существование аудиофайла
         if (!fs.existsSync(audioInfo.audioPath)) {
@@ -570,26 +893,59 @@ async function transcribeWithGemini(audioInfo) {
             const audioFile = fs.readFileSync(audioInfo.audioPath);
             const audioBase64 = audioFile.toString('base64');
 
-            // Отправляем запрос с текстом и аудио в правильном формате
-            const result = await model.generateContent([
-                { text: prompt },
-                {
-                    inlineData: {
-                        data: audioBase64,
-                        mimeType: "audio/mpeg"
+            // Добавляем механизм повторных попыток
+            const maxRetries = 3;
+            let retryCount = 0;
+            let lastError = null;
+
+            while (retryCount < maxRetries) {
+                try {
+                    // Отправляем запрос с текстом и аудио в правильном формате
+                    const result = await model.generateContent([
+                        { text: prompt },
+                        {
+                            inlineData: {
+                                data: audioBase64,
+                                mimeType: "audio/mpeg"
+                            }
+                        }
+                    ]);
+
+                    const response = await result.response;
+                    const text = response.text();
+
+                    console.log('Response received from Gemini API');
+
+                    // Проверяем, не пустая ли транскрипция
+                    if (text.length === 0) {
+                        console.log('Получена пустая транскрипция, повторная попытка...');
+                        throw new Error('Пустая транскрипция');
+                    }
+
+                    console.log(`Transcription length: ${text.length} characters`);
+
+                    return {
+                        title: audioInfo.title,
+                        transcription: text,
+                        method: 'direct' // Добавляем информацию о методе транскрипции (прямая отправка аудио)
+                    };
+                } catch (error) {
+                    lastError = error;
+                    retryCount++;
+                    console.error(`Ошибка при транскрипции (попытка ${retryCount}/${maxRetries}):`, error.message);
+
+                    if (retryCount < maxRetries) {
+                        // Экспоненциальная задержка между попытками (1s, 2s, 4s...)
+                        const delay = 1000 * Math.pow(2, retryCount - 1);
+                        console.log(`Повторная попытка через ${delay / 1000} секунд...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
                     }
                 }
-            ]);
+            }
 
-            const response = await result.response;
-            const text = response.text();
-
-            console.log('Response received from Gemini API');
-
-            return {
-                title: audioInfo.title,
-                transcription: text
-            };
+            // Если все попытки не удались, переключаемся на метод с URL
+            console.error('Все попытки прямой транскрипции не удались, переключаемся на метод с URL');
+            return await transcribeWithURL(audioInfo);
         } catch (error) {
             console.error('Error sending audio directly:', error);
             console.log('Switching to URL method due to error');
@@ -650,7 +1006,8 @@ async function transcribeWithURL(audioInfo) {
 
     return {
         title: audioInfo.title,
-        transcription: text
+        transcription: text,
+        method: 'url' // Добавляем информацию о методе транскрипции (URL)
     };
 }
 

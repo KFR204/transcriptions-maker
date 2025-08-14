@@ -106,6 +106,23 @@ document.addEventListener('DOMContentLoaded', () => {
       titleRow.appendChild(urlBadge);
       cardHeader.appendChild(titleRow);
       
+      // Добавляем информацию о методе транскрипции, если она есть
+      if (result.method) {
+        const methodRow = document.createElement('div');
+        methodRow.className = 'mt-2 small';
+        
+        const methodBadge = document.createElement('span');
+        
+        // Если метод URL, выделяем красным цветом
+        if (result.method === 'url') {
+          methodBadge.className = 'badge bg-danger';
+          methodBadge.textContent = 'Transcription via URL';
+        }
+        
+        methodRow.appendChild(methodBadge);
+        cardHeader.appendChild(methodRow);
+      }
+      
       // Создаем тело карточки
       const cardBody = document.createElement('div');
       cardBody.className = 'card-body';

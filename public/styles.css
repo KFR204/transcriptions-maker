@@ -182,3 +182,32 @@ h1.fw-bold.display-3 {
 footer {
     border-top: 1px solid #eee;
 }
+
+.proxy-status-container {
+    margin: 20px 0;
+    padding: 15px;
+    border-radius: 5px;
+    background-color: #f8f9fa;
+}
+
+#test-proxy-btn {
+    margin-bottom: 10px;
+}
+
+.proxy-info {
+    padding: 10px;
+    border-radius: 5px;
+    background-color: #f0f0f0;
+}
+
+.status-loading {
+    color: #0d6efd;
+}
+
+.status-success {
+    color: #198754;
+}
+
+.status-error {
+    color: #dc3545;
+}

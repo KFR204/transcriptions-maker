@@ -25,3 +25,6 @@ npm-debug.log*
 # Системные файлы
 .DS_Store
 Thumbs.db
+
+# Файлы с куки
+cookies.json
